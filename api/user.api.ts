@@ -19,22 +19,45 @@ export class UserApi {
   ) {}
 
   async login(payload: LoginPayload): Promise<APIResponse> {
-    return this.request.post(`${this.baseUrl}/api/users/login`, {
-      data: payload,
+    return this.request.post(`${this.baseUrl}/verifyLogin`, {
+      form: {
+        email: payload.email,
+        password: payload.password,
+      },
     });
   }
 
   async register(payload: RegisterPayload): Promise<APIResponse> {
-    return this.request.post(`${this.baseUrl}/api/users/register`, {
-      data: payload,
+    return this.request.post(`${this.baseUrl}/createAccount`, {
+      form: {
+        name: `${payload.firstName} ${payload.lastName}`,
+        email: payload.email,
+        password: payload.password,
+        title: 'Mr',
+        birth_date: '10',
+        birth_month: '5',
+        birth_year: '1995',
+        firstname: payload.firstName,
+        lastname: payload.lastName,
+        company: 'QA Factory',
+        address1: 'Main Street 1',
+        address2: 'Floor 2',
+        country: 'India',
+        zipcode: '1111',
+        state: 'Budapest',
+        city: 'Budapest',
+        mobile_number: '301234567',
+      },
     });
   }
 
-  async getProfile(token: string): Promise<APIResponse> {
-    return this.request.get(`${this.baseUrl}/api/users/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  async getUserByEmail(email: string): Promise<APIResponse> {
+    return this.request.get(
+      `${this.baseUrl}/getUserDetailByEmail?email=${encodeURIComponent(email)}`,
+    );
+  }
+
+  async getProfile(email: string): Promise<APIResponse> {
+    return this.getUserByEmail(email);
   }
 }

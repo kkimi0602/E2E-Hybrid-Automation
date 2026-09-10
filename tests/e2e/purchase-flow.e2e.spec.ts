@@ -1,78 +1,58 @@
-import { test, expect } from '@playwright/test';
-//import { LoginPage } from '../../pages/LoginPage';
-import { CartPage } from '../../pages/CartPage';
-import { CheckoutPage } from '../../pages/CheckoutPage';
-import { UserApi } from '../../api/user.api';
-import { CartApi, AddToCartPayload } from '../../api/cart.api';
-import { testUsers, testProducts, shippingFixture } from '../../utils/testData';
+import { test, expect } from '../fixtures/test-fixtures';
+import { buildPrimaryProduct } from '../../utils/testData';
 
-test.describe('E2E Hybrid Tests - Complete Purchase Flow', () => {
-  //const baseUrl = process.env.APP_BASE_URL || 'http://localhost:3000';
-  const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
-
-  //let loginPage: LoginPage;
-  let cartPage: CartPage;
-  let checkoutPage: CheckoutPage;
-  let userApi: UserApi;
-  let cartApi: CartApi;
-  let authToken: string;
-
-  test.beforeEach(async ({ page, request }) => {
-    //loginPage = new LoginPage(page);
-    cartPage = new CartPage(page);
-    checkoutPage = new CheckoutPage(page);
-    userApi = new UserApi(request, apiBaseUrl);
-    cartApi = new CartApi(request, apiBaseUrl);
-
-    // Step 1: API login to get auth token
-    const loginResp = await userApi.login({
-      email: testUsers.standard.email,
-      password: testUsers.standard.password,
-    });
-    const loginBody = (await loginResp.json()) as { token: string };
-    authToken = loginBody.token;
-  });
-
-  test('should complete purchase flow: API add -> UI checkout -> success', async ({
-    page,
+test.describe('E2E Hybrid Tests - Purchase Flow', () => {
+  test('should register via UI and verify user via API', async ({
+    authService,
   }) => {
-    // Step 1: API - Add product to cart
-    const addPayload: AddToCartPayload = {
-      productId: testProducts.backpack.id,
-      quantity: testProducts.backpack.quantity,
-    };
-    const addResp = await cartApi.addToCart(authToken, addPayload);
-    expect(addResp.status()).toBe(200);
-
-    // Step 2: UI - Navigate and verify cart
-    await cartPage.goto();
-    await cartPage.expectItemsCount(1);
-
-    // Step 3: UI - Proceed to checkout
-    await cartPage.proceedToCheckout();
-    await expect(page).toHaveURL(/\/checkout/);
-
-    // Step 4: UI - Fill shipping and place order
-    await checkoutPage.fillShippingDetails(shippingFixture);
-    await checkoutPage.placeOrder();
-
-    // Step 5: UI - Verify success
-    await checkoutPage.expectOrderSuccess('Order placed successfully');
+    const registered = await authService.registerViaUiAndVerifyViaApi();
+    expect(registered.email).toContain('@');
   });
 
-  test('should clear cart via API and verify in UI', async () => {
-    // Step 1: API - Add then clear cart
-    const addPayload: AddToCartPayload = {
-      productId: testProducts.backpack.id,
-      quantity: 1,
-    };
-    await cartApi.addToCart(authToken, addPayload);
+  test('should add item via UI and complete purchase with data consistency check', async ({
+    authService,
+    purchaseService,
+  }) => {
+    const product = buildPrimaryProduct();
+    await authService.registerViaUi();
+    await purchaseService.addUiItemsAndValidateCart(product.name);
+    await purchaseService.completePurchaseAndValidateItemsMatch();
+  });
 
-    const clearResp = await cartApi.clearCart(authToken);
-    expect(clearResp.status()).toBe(200);
+  test('should document unsupported API cart mutation on AutomationExercise', async ({
+    purchaseService,
+    cartApi,
+  }) => {
+    const product = buildPrimaryProduct();
+    test.skip(
+      !cartApi.supportsCartMutations(),
+      'AutomationExercise public API does not expose cart mutation endpoints.',
+    );
 
-    // Step 2: UI - Navigate to cart and verify empty
-    await cartPage.goto();
-    await expect(cartPage.emptyCartMessage).toBeVisible();
+    const result = await purchaseService.tryAddCartViaApiAndCheckUi(
+      'token-not-used-in-this-environment',
+      product.id,
+      product.quantity,
+      product.name,
+    );
+
+    expect(result).toBe('supported');
+  });
+
+  test('should fail when attempting out-of-stock purchase via API', async ({
+    purchaseService,
+    cartApi,
+  }) => {
+    const product = buildPrimaryProduct();
+    test.skip(
+      !cartApi.supportsCartMutations(),
+      'Out-of-stock API scenario is not available on AutomationExercise public API.',
+    );
+
+    const result = await purchaseService.expectOutOfStockFailure(
+      'token-not-used-in-this-environment',
+      product.id,
+    );
+    expect(result).toBe('supported');
   });
 });

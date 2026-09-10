@@ -1,65 +1,74 @@
-import { test, expect } from '@playwright/test';
-import { UserApi, RegisterPayload } from '../../api/user.api';
-import { testUsers } from '../../utils/testData';
-import { randomEmail } from '../../utils/helpers';
+import { test, expect } from '../fixtures/test-fixtures';
+import { SignupDataBuilder } from '../../utils/factories/UserFactory';
 
 test.describe('User API Tests', () => {
-  let userApi: UserApi;
-  const baseUrl = process.env.API_BASE_URL || 'http://localhost:3000';
+  test('should verify login with valid credentials', async ({ userApi }) => {
+    const user = new SignupDataBuilder().build();
+    const registerResponse = await userApi.register({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      password: user.password,
+    });
 
-  test.beforeEach(async ({ request }) => {
-    userApi = new UserApi(request, baseUrl);
-  });
+    expect(registerResponse.status()).toBe(200);
 
-  test('should login and receive token', async () => {
     const response = await userApi.login({
-      email: testUsers.standard.email,
-      password: testUsers.standard.password,
+      email: user.email,
+      password: user.password,
     });
 
     expect(response.status()).toBe(200);
-    const body = (await response.json()) as { token?: string };
-    expect(body.token).toBeTruthy();
+    const body = (await response.json()) as { responseCode?: number };
+    expect(body.responseCode).toBe(200);
   });
 
-  test('should return 401 on invalid credentials', async () => {
+  test('should return validation failure on invalid credentials', async ({
+    userApi,
+  }) => {
+    const user = new SignupDataBuilder().build();
     const response = await userApi.login({
-      email: testUsers.standard.email,
+      email: user.email,
       password: 'wrongPassword123!',
     });
 
-    expect(response.status()).toBe(401);
+    expect(response.status()).toBe(200);
+    const body = (await response.json()) as { responseCode?: number };
+    expect(body.responseCode).toBe(404);
   });
 
-  test('should register a new user', async () => {
-    const newEmail = randomEmail('newuser');
-    const registerPayload: RegisterPayload = {
-      firstName: 'Test',
-      lastName: 'User',
-      email: newEmail,
-      password: 'Password123!',
-    };
-
-    const response = await userApi.register(registerPayload);
-
-    expect([201, 200]).toContain(response.status());
-    const body = (await response.json()) as { userId?: string };
-    expect(body.userId).toBeTruthy();
-  });
-
-  test('should get user profile with valid token', async () => {
-    const loginResp = await userApi.login({
-      email: testUsers.standard.email,
-      password: testUsers.standard.password,
+  test('should register a new user through API', async ({ userApi }) => {
+    const signupData = new SignupDataBuilder().build();
+    const response = await userApi.register({
+      firstName: signupData.firstName,
+      lastName: signupData.lastName,
+      email: signupData.email,
+      password: signupData.password,
     });
 
-    const loginBody = (await loginResp.json()) as { token: string };
-    const token = loginBody.token;
+    expect(response.status()).toBe(200);
+    const body = (await response.json()) as { responseCode?: number };
+    expect(body.responseCode).toBe(201);
+  });
 
-    const profileResp = await userApi.getProfile(token);
+  test('should fetch user details by email', async ({ userApi }) => {
+    const user = new SignupDataBuilder().build();
+    const registerResponse = await userApi.register({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      password: user.password,
+    });
+    expect(registerResponse.status()).toBe(200);
+
+    const profileResp = await userApi.getProfile(user.email);
 
     expect(profileResp.status()).toBe(200);
-    const profileBody = (await profileResp.json()) as { email: string };
-    expect(profileBody.email).toBe(testUsers.standard.email);
+    const profileBody = (await profileResp.json()) as {
+      responseCode?: number;
+      user?: { email?: string };
+    };
+    expect(profileBody.responseCode).toBe(200);
+    expect(profileBody.user?.email).toBe(user.email);
   });
 });

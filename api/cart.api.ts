@@ -11,8 +11,12 @@ export class CartApi {
     private readonly baseUrl = '',
   ) {}
 
+  supportsCartMutations(): boolean {
+    return !this.baseUrl.includes('automationexercise.com/api');
+  }
+
   async getCart(token: string): Promise<APIResponse> {
-    return this.request.get(`${this.baseUrl}/api/cart`, {
+    return this.request.get(`${this.baseUrl}/cart`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -23,7 +27,7 @@ export class CartApi {
     token: string,
     payload: AddToCartPayload,
   ): Promise<APIResponse> {
-    return this.request.post(`${this.baseUrl}/api/cart/items`, {
+    return this.request.post(`${this.baseUrl}/cart/items`, {
       data: payload,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -32,7 +36,7 @@ export class CartApi {
   }
 
   async clearCart(token: string): Promise<APIResponse> {
-    return this.request.delete(`${this.baseUrl}/api/cart`, {
+    return this.request.delete(`${this.baseUrl}/cart`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

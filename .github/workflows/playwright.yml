@@ -1,13 +1,35 @@
 name: Playwright Tests
 on:
   push:
-    branches: [main, master]
+    branches: [master, feature/tests]
   pull_request:
-    branches: [main, master]
+    branches: [master]
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Prettier Check
+        run: npm run format:check
+      - name: Typecheck
+        run: npm run typecheck
+
   test:
+    needs: lint
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+        total-shards: [2]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,11 +39,51 @@ jobs:
         run: npm ci
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
-      - name: Run Playwright tests
-        run: npx playwright test
+      - name: Run Playwright tests (shard)
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ matrix.total-shards }}
+      - name: Upload Playwright traces
+        uses: actions/upload-artifact@v4
+        if: ${{ failure() && !cancelled() }}
+        with:
+          name: playwright-traces-shard-${{ matrix.shard }}
+          path: test-results/**/trace.zip
+          retention-days: 30
+      - name: Upload Allure raw results
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: allure-results-shard-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
+          retention-days: 30
+
+  allure-report:
+    needs: test
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Install Allure command line
+        run: npm ci
+      - name: Download Allure results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results
+          merge-multiple: true
+      - name: Generate Allure report
+        run: npm run allure:generate
+      - name: Upload Allure report
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/
           retention-days: 30
